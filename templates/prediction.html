@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Prediction Result</title>
+    <link rel="stylesheet" type="text/css" href="static/styles.css">
+</head>
+<body>
+    <h1>Prediction Result</h1>
+    <h3>List of songs that possibly match the humming:</h3>
+    <div id="predictionContainer">
+        {% for prediction in data.prediction %}
+            <div class="prediction-line">
+                <div>
+                    <!-- <h4>{{ prediction.id }}</h4> -->
+                    <p><strong>Title:</strong> {{ prediction.title }}</p>
+                    <p><strong>Artist:</strong> {{ prediction.artist }}</p>
+                </div>
+                <div>
+                    <a href="{{ prediction.youtube_link }}" target="_blank">
+                        <img class="thumbnail" src="{{ prediction.thumbnail_link }}" alt="Thumbnail">
+                    </a>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+    <a href="/"><button id="backHome">Back</button></a>
+</body>
+</html>

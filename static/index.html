@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Web Speech Recorder</title>
+        <link rel="stylesheet" type="text/css" href="static/styles.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Humming to find your fav song!</h1>
+            <div class="button-container">
+                <button id="startRecording">Start recording</button>
+                <button id="stopRecording" disabled>Stop recording</button>
+                <button id="predict" disabled>Predict</button>
+            </div>
+            <div class="audio-container">
+                <h3>Recorded Audio</h3>
+                <audio controls id="audioPlayer"></audio>
+            </div>
+            <div class="timer-container">
+                Recording Time: <span id="timer">00:00</span>
+            </div>
+            <div class="progress-container">
+                <div id="progressBar"></div>
+            </div>
+        </div>
+    </body>
+<script>
+    var maxRecordingTime = 25000; // Maximum recording time in milliseconds
+    var recordingTimer; // Timer variable
+    var startTime; // Start time of recording
+    var audioChunks = []; // Array to store recorded audio chunks
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+            handlerFunction(stream);
+        })
+        .catch(error => {
+            console.error('Error accessing microphone:', error);
+        });
+
+    function handlerFunction(stream) {
+        rec = new MediaRecorder(stream);
+        rec.ondataavailable = e => {
+            audioChunks.push(e.data);
+            if (rec.state == "inactive") {
+                let blob = new Blob(audioChunks, { type: 'audio/mpeg-3' });
+                displayAudio(blob);
+                enablePredictButton();
+                sendData(blob);
+            }
+        };
+    }
+
+    function displayAudio(blob) {
+        var audioPlayer = document.getElementById('audioPlayer');
+        audioPlayer.src = URL.createObjectURL(blob);
+    }
+
+    function enablePredictButton() {
+        var predictButton = document.getElementById('predict');
+        predictButton.disabled = false;
+    }
+
+    function sendData(data) {
+        var form = new FormData();
+        form.append('file', data, 'hum.wav'); // Save the file with the name 'hum.mp3'
+        // Chrome inspector shows that the post data includes a file.
+        $.ajax({
+            type: 'POST',
+            url: '/save-record',
+            data: form,
+            cache: false,
+            processData: false,
+            contentType: false
+        }).done(function (data) {
+            console.log(data);
+        });
+    }
+
+    function startRecordingTimer() {
+        startTime = Date.now(); // Record the start time
+        recordingTimer = setInterval(function () {
+            var currentTime = Date.now();
+            var elapsedTime = currentTime - startTime;
+            displayTimer(elapsedTime);
+            updateProgressBar(elapsedTime);
+            if (elapsedTime >= maxRecordingTime) {
+                console.log("Maximum recording time reached.");
+                stopRecording.click(); // Simulate click on the stop button
+            }
+        }, 1000); // Update the timer every second
+    }
+
+    function stopRecordingTimer() {
+        clearInterval(recordingTimer);
+    }
+
+    function displayTimer(elapsedTime) {
+        var timerElement = document.getElementById('timer');
+        var seconds = Math.floor(elapsedTime / 1000);
+        var minutes = Math.floor(seconds / 60);
+        seconds = seconds % 60;
+        var timerText = padNumber(minutes) + ":" + padNumber(seconds);
+        timerElement.textContent = timerText;
+    }
+
+    function updateProgressBar(elapsedTime) {
+        var progressBar = document.getElementById('progressBar');
+        var progress = (elapsedTime / maxRecordingTime) * 100;
+        progressBar.style.width = progress + '%';
+    }
+
+    function padNumber(number) {
+        return number.toString().padStart(2, '0');
+    }
+
+    var startRecording = document.getElementById('startRecording');
+    var stopRecording = document.getElementById('stopRecording');
+    var predictButton = document.getElementById('predict');
+
+    startRecording.onclick = function (e) {
+        console.log('Recording started..');
+        startRecording.disabled = true;
+        stopRecording.disabled = false;
+        predictButton.disabled = true;
+
+        audioChunks = [];
+        rec.start();
+        startRecordingTimer(); // Start the recording timer
+    };
+
+    stopRecording.onclick = function (e) {
+        console.log("Recording stopped.");
+        startRecording.disabled = false;
+        stopRecording.disabled = true;
+        predictButton.disabled = false;
+        rec.stop();
+        stopRecordingTimer(); // Stop the recording timer
+        displayTimer(0); // Reset the timer display
+        updateProgressBar(0); // Reset the progress bar
+    };
+
+    predictButton.onclick = function (e) {
+        window.location.href = '/predict';
+    };
+
+    predictButton.disabled = true;
+
+    function getLocalStream() {
+    navigator.mediaDevices
+        .getUserMedia({ video: false, audio: true })
+        .then((stream) => {
+        window.localStream = stream; // A
+        window.localAudio.srcObject = stream; // B
+        window.localAudio.autoplay = true; // C
+        })
+        .catch((err) => {
+        console.error(`you got an error: ${err}`);
+        });
+    }
+</script>
+</html>

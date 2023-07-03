@@ -1,5 +1,6 @@
 # hum2song_app
-simple humming to song web app with flask and pytorch
+Simple humming to song web app with flask and pytorch
+
 ***just to test out the hum2song method from this repo: https://github.com/vovanphuc/hum2song***
 1. Download model checkpoint (resnet18), index2id.pkl and cfg.pkl (contain a faiss IndexFlatL2 object to do similarity search) from
    https://drive.google.com/drive/folders/1Y1y0iQUIPWi2qFrELIPiidKrFx2EgtcB?usp=sharing

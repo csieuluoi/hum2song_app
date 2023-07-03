@@ -1,0 +1,5 @@
+librosa
+numpy
+pydub
+faiss-gpu
+Flask

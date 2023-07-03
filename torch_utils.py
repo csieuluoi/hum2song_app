@@ -6,6 +6,7 @@ import yaml
 import os
 import sys
 import inspect
+import argparse
 
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -136,7 +137,7 @@ def search_vector(model, image, cfg, index2id):
     return _result
 
 
-def create_search_dict(root_song, input_shape, model, mp3_root, save_dir="./checkpoints"):
+def create_search_dict(root_song, input_shape, model, mp3_root, segment_overlap = 0.5, save_dir="./checkpoints"):
     
     cfg = CFG()
     list_song = os.listdir(root_song)
@@ -145,7 +146,7 @@ def create_search_dict(root_song, input_shape, model, mp3_root, save_dir="./chec
     for name_song in tqdm(list_song):
         path_song = os.path.join(root_song, name_song)
         # image = load_image(path_song, input_shape)
-        images = load_images(path_song, input_shape, overlap_size=0.4)
+        images = load_images(path_song, input_shape, overlap_size=segment_overlap)
         tag = TinyTag.get(os.path.join(mp3_root, name_song.split(".")[0] + ".mp3")) # failed font
         # audio_file = eyed3.load(os.path.join(mp3_root, name_song.split(".")[0] + ".mp3"))
         for image in images:
@@ -162,10 +163,16 @@ def create_search_dict(root_song, input_shape, model, mp3_root, save_dir="./chec
     with open(os.path.join(save_dir, 'cfg.pkl'), 'wb') as f:
         pickle.dump(cfg, f)
 
-def adding_songs2cfg(root_dir, input_shape=(630, 80), batch_size = 8, save_dir = "./checkpoints"):
-    model, cfg, index2id = load_dependencies(root_path="./checkpoints", checkpoint_name="resnet18_latest.pth")
-    
-    print(len(index2id))
+def songs2search_dict(root_dir, input_shape=(630, 80), batch_size = 8, segment_overlap = 0.5, audio_position = (0.1, 0.9), device = 'cuda', save_dir = "./checkpoints", checkpoint_name = "resnet18_latest.pth"):
+    start_time_load_model = time.time()
+    model = wrap_resnet_face18(False)
+    model.load_state_dict(torch.load(os.path.join(save_dir, checkpoint_name)))
+    model.to(device)
+    model.eval()
+
+    cfg = CFG()
+    index2id = {"-1": ""}    
+
     allowed_extension = {'mp3', 'wav', 'flac'}
 
     def allowed_file(filename):
@@ -176,9 +183,51 @@ def adding_songs2cfg(root_dir, input_shape=(630, 80), batch_size = 8, save_dir =
         for name in tqdm(files):
             file_path = os.path.join(root, name)
             if allowed_file(name):
-                spec = process_file(file_path, sampling_rate, max_wav_value, STFT, full_song=True)
+                spec = process_file(file_path, sampling_rate, max_wav_value, STFT, full_song=True, load_method="pydub")
                 tag = TinyTag.get(file_path) # failed font
-                images = get_images(spec, input_shape, overlap_size=0)
+                images = get_images(spec, input_shape, audio_position = audio_position, overlap_size=segment_overlap)
+
+                for i in range(0, len(images), batch_size):
+                    if i + batch_size < len(images):
+                        batch_img = images[i: i+batch_size]
+                        features = get_features(model, batch_img, batch_size)
+                        for feature in features:
+                            cfg.vector2index.add(feature)
+                            index2id[str(l_index2id)] = [None, tag.title, tag.artist] # None since new song has no id
+                            # print([None, tag.title, tag.artist])
+                            l_index2id+=1
+                    else:
+                        batch_img = images[i:]
+                        features = get_features(model, batch_img, batch_size)
+                        for feature in features:
+                            cfg.vector2index.add(feature)
+                            index2id[str(l_index2id)] = [None, tag.title, tag.artist] # None since new song has no id
+                            # print([None, tag.title, tag.artist])
+                            l_index2id+=1
+            
+    # need to save this two thing instead of returning them
+    with open(os.path.join(save_dir, 'index2id.pkl'), 'wb') as f:
+        pickle.dump(index2id, f)
+    
+    with open(os.path.join(save_dir, 'cfg.pkl'), 'wb') as f:
+        pickle.dump(cfg, f)
+
+def adding_songs2cfg(root_dir, input_shape=(630, 80), batch_size = 8, segment_overlap = 0.5, audio_position = (0.1, 0.9), save_dir = "./checkpoints"):
+    model, cfg, index2id = load_dependencies(root_path="./checkpoints", checkpoint_name="resnet18_latest.pth")
+    
+    allowed_extension = {'mp3', 'wav', 'flac'}
+
+    def allowed_file(filename):
+        return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extension
+
+    l_index2id = len(index2id) - 1
+    for root, dirs, files in os.walk(root_dir, topdown=False):
+        for name in tqdm(files):
+            file_path = os.path.join(root, name)
+            if allowed_file(name):
+                spec = process_file(file_path, sampling_rate, max_wav_value, STFT, full_song=True, load_method="pydub")
+                tag = TinyTag.get(file_path) # failed font
+                images = get_images(spec, input_shape, audio_position, overlap_size=segment_overlap)
 
                 for i in range(0, len(images), batch_size):
                     if i + batch_size < len(images):
@@ -238,103 +287,25 @@ def get_all_result(root_hum, model, cfg, index2id, input_shape):
 
 def get_result(root_hum, name_hum, model, cfg, index2id):
     path_hum = os.path.join(root_hum, name_hum)
-    image = process_file(path_hum, sampling_rate, max_wav_value, STFT)
+    image = process_file(path_hum, sampling_rate, max_wav_value, STFT, load_method="librosa")
     rsult_song = search_vector(model, image, cfg, index2id)
     return rsult_song
 
-# def get_result(root_hum, name_hum, model, cfg, index2id, input_shape):
-#     path_hum = os.path.join(root_hum, name_hum)
-#     rsult_song = search_vector(model, path_hum, cfg, index2id, input_shape)
-#     return rsult_song
 
-# def search_vector(model, path_hum, cfg, index2id, input_shape):
-#     image = load_image(path_hum, input_shape)
-#     feature = get_feature(model, image)
-#     _, lst_index = cfg.vector2index.search(feature, k=30)
-#     lst_result = []
-#     for index in lst_index[0]:
-#         result = str(index2id[str(index)]).split('_')[0]
-#         if result not in lst_result:
-#             lst_result.append(result)
-#         if len(lst_result) == 10:
-#             break
-#     _result = ''
-#     for index in lst_result[:10]:
-#         _result += f",{index}"
-#     return _result
 
-# def search_vector(model, image, cfg, index2id):
-#     feature = get_feature(model, image)
-#     print(feature)
-#     _, lst_index = cfg.vector2index.search(feature, k=50)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
     
-#     lst_result = []
-#     for index in lst_index[0]:
-#         result = index2id[str(index)]
-#         if result not in lst_result:
-#             lst_result.append(result)
-#         if len(lst_result) == 10:
-#             break
-        
-#     print(lst_result)
-#     prompt_related_video_urls = {}
-#     prompt_thumbnails = {}
-
-#     for result in lst_result[:10]:
-#         prompt_text = str(result[1]) + "-" + str(result[2])
-#         if prompt_text in cache:
-#             thumbnail_url = cache[prompt_text]["thumbnail_url"]
-#             prompt_thumbnails[prompt_text] = cache[prompt_text]["video_url"]
-
-#         response = youtube.search().list(
-#             part='snippet',
-#             q=prompt_text,
-#             type='video',
-#             maxResults=1
-#         ).execute()
-
-#         if 'items' in response:
-#             if len(response['items']) > 0:
-#                 item = response['items'][0]
-#                 video_id = item['id']['videoId']
-#                 vid_url = f'https://www.youtube.com/watch?v={video_id}'
-
-#                 video_response = youtube.videos().list(
-#                     part='snippet',
-#                     id=video_id
-#                 ).execute()
-
-#                 thumbnail_url = video_response['items'][0]['snippet']['thumbnails']['default']['url']
-#                 # Store the result in the cache
-                
-#             else:
-#                 vid_url = f"https://www.youtube.com/results?search_query={prompt_text}"
-#                 thumbnail_url = "https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg"
-
-#             prompt_related_video_urls[prompt_text] = vid_url
-#             prompt_thumbnails[prompt_text] = thumbnail_url
-#             cache[prompt_text] = {
-#                     'video_url': vid_url,
-#                     'thumbnail_url': thumbnail_url
-#                 }
-
-#     _result = []
-
-#     for _, result in enumerate(lst_result[:10]):
-#         prompt_text = str(result[1]) + "-" + str(result[2])
-#         _result.append(
-#             {
-#                 "id": result[0],
-#                 "title": result[1],
-#                 "artist": result[2],
-#                 "youtube_link": prompt_related_video_urls[prompt_text],
-#                 "thumbnail_link": prompt_thumbnails[prompt_text]
-#             }
-#         )
-#     return _result
-
-# if __name__ == "__main__":
-
+    parser.add_argument("--song_dir", type=str, required=True, help="path to songs")
+    parser.add_argument("--out_dir", type=str, required=False, default = "./checkpoints", help="path to save output files")
+    parser.add_argument("--batch_size", type=int, required=False, default=8, help="# segments to generate embeddings at a time")
+    parser.add_argument("--overlap_size", type=float, required= False, default = 0.7, help="overlapping rate between 2 consecutive segments")
+    parser.add_argument("--adding_song", action = "store_true", required=False, help="if adding new song to created search dict, use --adding_song")
+    args = parser.parse_args()
+    input_shape = (630, 80)
+    audio_position = (0.1, 0.9) # start and end point of a song to start generating embeddings
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # checkpoint_path = "./checkpoints"
     # start_time_load_model = time.time()
     # model = wrap_resnet_face18(False)
@@ -345,17 +316,15 @@ def get_result(root_hum, name_hum, model, cfg, index2id):
 
     # root_song = "/media/dungpham/New Volume/AIproject/AI_Audio/hum2song/hum2song/preprocessed/public_test/full_song"
     # mp3_root =  "/media/dungpham/New Volume/AIproject/AI_Audio/hum2song/hum2song/data/public_test/full_song"
-    # input_shape = (630, 80)
-    # # create_search_dict(root_song, input_shape, model, mp3_root)
+    # create_search_dict(root_song, input_shape, model, mp3_root)
 
     # new_mp3_root = "/media/dungpham/New Volume/music/s22ultra_music"
-    # adding_songs2cfg(new_mp3_root, input_shape, save_dir = "./checkpoints")
+    if args.adding_song:
+        print("adding new songs to current seach dictionary")
+        adding_songs2cfg(args.song_dir, input_shape, args.batch_size, args.overlap_size, audio_position, args.out_dir)
+    else:
+        print("create new search dictionary")
+        songs2search_dict(args.song_dir, input_shape, args.batch_size, args.overlap_size, audio_position, device, args.out_dir)
 
-    # root_hum = "/media/dungpham/New Volume/AIproject/AI_Audio/hum2song/hum2song/preprocessed/public_test/hum"
 
-    # model, cfg, index2id = load_dependencies(root_path="/media/dungpham/New Volume/AIproject/AI_Audio/hum2song/hum2song/checkpoints")
-    
-
-    # search_text = "photograph - edsheeran"
-    # video_url, thumbnail_url = get_video_url(search_text)
-    # print(video_url, thumbnail_url)
+# python torch_utils.py --song_dir "/media/dungpham/New Volume/AIproject/AI_Audio/hum2song/hum2song/data/train/song"

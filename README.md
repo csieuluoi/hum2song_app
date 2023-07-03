@@ -7,8 +7,8 @@ simple humming to song web app with flask and pytorch
 2. Install pytorch:
    https://pytorch.org/get-started/locally/
    
-4. Install requirements
+4. Install requirements:
    pip install -r requirements.txt
    
-5. run flask app
+5. run flask app:
    flask --app main.py run 

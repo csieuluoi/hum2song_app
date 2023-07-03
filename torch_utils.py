@@ -29,14 +29,6 @@ from googleapiclient.discovery import build
 from cachetools import TTLCache
 from youtubesearchpython import VideosSearch
 
-
-
-# API_KEY = "AIzaSyAiUZ3DmWhvB1aGrNXbMhpWFwcK0hpWm5s"
-# API_KEY = "AIzaSyC6955_4A7DlqhHW_m8wfeIcJQ24DK4FbU"
-# youtube = build('youtube', 'v3', developerKey=API_KEY)
-
-# cache = TTLCache(maxsize=100, ttl=3600)  # Max size: 100 entries, TTL: 1 hour (3600 seconds)
-
 def get_video_url(search_text):
     videosSearch = VideosSearch(search_text, limit = 1)
     videosResult = videosSearch.result()
@@ -274,16 +266,6 @@ def load_dependencies(root_path = "./checkpoints", checkpoint_name = 'resnet18_b
     cfg = CustomUnpickler(open(os.path.join(root_path, cfg_name), 'rb')).load()
 
     return model, cfg, index2id
-
-def get_all_result(root_hum, model, cfg, index2id, input_shape):
-    lst_hum = sorted(os.listdir(root_hum))
-    results = []
-    for _, name_hum in tqdm(enumerate(lst_hum)):
-        path_hum = os.path.join(root_hum, name_hum)
-        rsult_song = search_vector(model, path_hum, cfg, index2id, input_shape)
-        results.append(rsult_song)
-    return results
-
 
 def get_result(root_hum, name_hum, model, cfg, index2id):
     path_hum = os.path.join(root_hum, name_hum)

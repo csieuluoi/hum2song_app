@@ -16,14 +16,18 @@ Simple humming to song web app with flask and pytorch
       ```
       python torch_utils.py --song_dir "path-to-your-songs-folder" --adding_song
       ```
-3. Install pytorch:
+2. Install pytorch:
    https://pytorch.org/get-started/locally/
    
-4. Install requirements:
+3. Install requirements:
    ```sh
    pip install -r requirements.txt
    ```
-6. run flask app:
+4. run flask app:
    ```sh
    flask --app main.py run 
    ```
+
+   ![Main page](main-page.png)
+   ![prediction result](prediction-page.png)
+
